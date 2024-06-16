@@ -2,6 +2,7 @@ import dask.dataframe as dd
 import pandas as pd
 import streamlit as st
 from openpyxl import load_workbook
+from openpyxl.styles import Font
 from io import BytesIO
 
 def read_excel_sheets(file):
@@ -72,6 +73,14 @@ def save_results_to_excel(results):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         for sheet_name, result_df in results.items():
             result_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+            # Apply bold font to the total row
+            worksheet = writer.sheets[sheet_name]
+            total_row_idx = len(result_df)  # Total row index (1-based)
+            for col in range(1, len(result_df.columns) + 2):  # Including index column
+                cell = worksheet.cell(row=total_row_idx + 1, column=col)
+                cell.font = Font(bold=True)
+        
         autofit_excel(writer)
     output.seek(0)
     return output
