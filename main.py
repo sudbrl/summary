@@ -2,9 +2,10 @@ import dask.dataframe as dd
 import pandas as pd
 import streamlit as st
 from openpyxl import load_workbook
+from io import BytesIO
 
-def read_excel_sheets(file_path):
-    sheets = pd.read_excel(file_path, sheet_name=None)
+def read_excel_sheets(file):
+    sheets = pd.read_excel(file, sheet_name=None)
     dask_sheets = {sheet_name: dd.from_pandas(sheet_df, npartitions=1) for sheet_name, sheet_df in sheets.items()}
     return dask_sheets
 
@@ -15,11 +16,11 @@ def calculate_common_actype_desc(sheets_1, sheets_2):
             df1 = sheets_1[sheet_name]
             df2 = sheets_2[sheet_name]
 
-            # Ensure 'Ac Type Desc', 'Balance', 'Main Code', and 'Limit' columns exist
+            # Ensure required columns exist
             if all(col in df1.columns for col in ['Ac Type Desc', 'Balance', 'Main Code', 'Limit']) and \
                all(col in df2.columns for col in ['Ac Type Desc', 'Balance', 'Main Code', 'Limit']):
                 
-                # Exclude rows with Limit == 0 if the 'Limit' column is present
+                # Exclude rows with Limit == 0
                 df1 = df1[df1['Limit'] != 0]
                 df2 = df2[df2['Limit'] != 0]
 
@@ -40,17 +41,21 @@ def calculate_common_actype_desc(sheets_1, sheets_2):
                 
                 # Replace NaN values with 0
                 combined_df = combined_df.fillna(0)
+
+                # Add total row
+                total_row = pd.DataFrame(combined_df.sum()).transpose()
+                total_row.index = ['Total']
+                combined_df = pd.concat([combined_df, total_row])
                 
                 # Select relevant columns for output
                 result_df = combined_df.reset_index()
                 result[sheet_name] = result_df
     return result
 
-def autofit_excel(file_path):
-    wb = load_workbook(file_path)
-    for sheet in wb.sheetnames:
-        ws = wb[sheet]
-        for column_cells in ws.columns:
+def autofit_excel(writer):
+    for sheet_name in writer.sheets:
+        worksheet = writer.sheets[sheet_name]
+        for column_cells in worksheet.columns:
             max_length = 0
             column = column_cells[0].column_letter
             for cell in column_cells:
@@ -60,14 +65,16 @@ def autofit_excel(file_path):
                 except:
                     pass
             adjusted_width = (max_length + 2)
-            ws.column_dimensions[column].width = adjusted_width
-    wb.save(file_path)
+            worksheet.column_dimensions[column].width = adjusted_width
 
-def save_results_to_excel(results, output_file):
-    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+def save_results_to_excel(results):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
         for sheet_name, result_df in results.items():
             result_df.to_excel(writer, sheet_name=sheet_name, index=False)
-    autofit_excel(output_file)
+        autofit_excel(writer)
+    output.seek(0)
+    return output
 
 def main():
     st.title("Excel File Comparison Tool")
@@ -78,29 +85,20 @@ def main():
     current_file = st.file_uploader("Upload Second Excel File", type=["xlsx"])
 
     if previous_file and current_file:
-        output_file = 'comparison_output.xlsx'
-
         with st.spinner("Processing..."):
-            with open('previous_file.xlsx', 'wb') as f:
-                f.write(previous_file.getbuffer())
-
-            with open('current_file.xlsx', 'wb') as f:
-                f.write(current_file.getbuffer())
-
-            excel_sheets_1 = read_excel_sheets('previous_file.xlsx')
-            excel_sheets_2 = read_excel_sheets('current_file.xlsx')
+            excel_sheets_1 = read_excel_sheets(previous_file)
+            excel_sheets_2 = read_excel_sheets(current_file)
 
             results = calculate_common_actype_desc(excel_sheets_1, excel_sheets_2)
 
-            save_results_to_excel(results, output_file)
+            output_file = save_results_to_excel(results)
 
-        with open(output_file, "rb") as file:
-            st.download_button(
-                label="Download Comparison Output",
-                data=file,
-                file_name=output_file,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        st.download_button(
+            label="Download Comparison Output",
+            data=output_file,
+            file_name="comparison_output.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 if __name__ == "__main__":
     main()
