@@ -11,3 +11,4 @@ dask[dataframe]==2022.01.1
 
 # OpenPyXL for working with Excel files
 openpyxl==3.0.9
+numpy>=1.21.0,<1.24.0
