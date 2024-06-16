@@ -1,0 +1,13 @@
+# requirements.txt
+
+# Streamlit for creating the web app interface
+streamlit==0.87.0
+
+# Pandas for data manipulation
+pandas==1.3.3
+
+# Dask for parallel computing with Pandas DataFrames
+dask[dataframe]==2022.01.1
+
+# OpenPyXL for working with Excel files
+openpyxl==3.0.9
